@@ -1,0 +1,10 @@
+# Notebook, load testing and deployment helpers (on top of requirements.txt)
+-r requirements.txt
+pandas==3.1.1
+matplotlib==3.11.2
+seaborn==0.13.2
+jupyter==1.1.1
+nbconvert==7.17.2
+ipykernel==7.4.0
+locust==2.47.0
+huggingface_hub==2.4.0

@@ -1,0 +1,12 @@
+# Runtime: API, preprocessing, training and retraining
+tensorflow==2.21.0
+keras==3.15.1
+numpy==2.4.6
+scipy==1.17.1
+scikit-learn==1.9.1
+librosa==0.11.0
+soundfile==0.14.0
+soxr==1.1.0
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.34

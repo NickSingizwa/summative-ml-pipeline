@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# Raw dataset (1 GB) - recreate with: python scripts/download_data.py
+data/raw/
+data/train/**/*.wav
+data/test/**/*.wav
+data/new_batch/**/*.wav
+data/processed/cache/
+
+# Runtime state
+data/pipeline.db*
+models/.retrain.lock
+models/versions/*
+!models/versions/.gitkeep
+
+.DS_Store
+
+# optional pre-downloaded Linux wheels for offline Docker builds
+wheelhouse/*
+!wheelhouse/.gitkeep
