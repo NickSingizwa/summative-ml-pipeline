@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PumpSense</title>
+  <meta name="description" content="Water-pump fault detection from sound: prediction, monitoring, data insights and retraining.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M5 17h4l3-8 4 15 3-11 2 4h6' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7"/><path d="M5 17h4l3-8 4 15 3-11 2 4h6"/></svg>
+    <div>
+      <h1>PumpSense</h1>
+      <p>Water-pump fault detection from sound</p>
+    </div>
+  </div>
+  <div class="status" id="status-pill" role="status" aria-live="polite">
+    <span class="dot" aria-hidden="true"></span><span id="status-text">Connecting…</span>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Sections">
+  <button role="tab" aria-selected="true" data-tab="monitor">Monitor</button>
+  <button role="tab" aria-selected="false" data-tab="predict">Predict</button>
+  <button role="tab" aria-selected="false" data-tab="insights">Insights</button>
+  <button role="tab" aria-selected="false" data-tab="retrain">Upload &amp; retrain</button>
+</nav>
+
+<main>
+  <!-- monitor -->
+  <section id="tab-monitor" class="tab-panel" role="tabpanel">
+    <div class="tiles" id="monitor-tiles"></div>
+
+    <div class="grid two">
+      <article class="card">
+        <header class="card-head">
+          <div><h2>Uptime monitor</h2><p class="sub">Health check every 5 s from this browser</p></div>
+          <span class="chip" id="uptime-chip">–</span>
+        </header>
+        <div class="beats" id="beats" aria-label="Recent health checks"></div>
+        <div class="chart-box short"><canvas id="chart-health" aria-label="Health check response time"></canvas></div>
+      </article>
+
+      <article class="card">
+        <header class="card-head">
+          <div><h2>Production model</h2><p class="sub" id="model-sub">Held-out test set</p></div>
+          <button class="btn ghost" id="btn-evaluate">Re-evaluate on test set</button>
+        </header>
+        <div class="metric-bars" id="model-metrics"></div>
+        <p class="note" id="eval-note"></p>
+      </article>
+    </div>
+
+    <div class="grid two">
+      <article class="card">
+        <header class="card-head"><div><h2>Confusion matrix</h2><p class="sub">Test set, current model</p></div></header>
+        <div id="confusion"></div>
+      </article>
+      <article class="card">
+        <header class="card-head"><div><h2>Training history</h2><p class="sub" id="history-sub">Loss per epoch</p></div></header>
+        <div class="legend" id="history-legend"></div>
+        <div class="chart-box"><canvas id="chart-history" aria-label="Training and validation loss"></canvas></div>
+      </article>
+    </div>
+
+    <div class="grid two">
+      <article class="card">
+        <header class="card-head"><div><h2>Model versions</h2><p class="sub">Promoted by retraining; roll back any time</p></div></header>
+        <div class="table-wrap"><table id="versions-table"></table></div>
+      </article>
+      <article class="card">
+        <header class="card-head"><div><h2>Recent predictions</h2><p class="sub" id="pred-sub">Logged in the database</p></div></header>
+        <div class="table-wrap"><table id="predictions-table"></table></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- predict -->
+  <section id="tab-predict" class="tab-panel" role="tabpanel" hidden>
+    <div class="grid two">
+      <article class="card">
+        <header class="card-head"><div><h2>Check a pump</h2><p class="sub">Upload a recording (WAV, FLAC, OGG or MP3; 10 s works best)</p></div></header>
+        <label class="dropzone" id="predict-drop">
+          <input type="file" id="predict-file" accept=".wav,.flac,.ogg,.mp3,audio/*">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <span><strong>Choose a file</strong> or drop it here</span>
+          <span class="sub" id="predict-file-name">No file selected</span>
+        </label>
+        <h3 class="mini-title">Or try a test-set clip</h3>
+        <p class="sub">These clips were held out from training. Their true label is in the file name.</p>
+        <div class="samples" id="samples"></div>
+        <audio id="player" controls hidden></audio>
+        <button class="btn primary wide" id="btn-predict" disabled>Predict</button>
+      </article>
+
+      <article class="card" id="result-card">
+        <header class="card-head"><div><h2>Result</h2><p class="sub">Model output for the selected recording</p></div></header>
+        <div id="result-empty" class="empty">Select a recording and press <strong>Predict</strong>.</div>
+        <div id="result" hidden>
+          <div class="verdict" id="verdict"></div>
+          <div class="meter-wrap">
+            <div class="meter-label"><span>Probability of fault</span><strong id="prob-value"></strong></div>
+            <div class="meter" id="prob-meter"><div class="fill"></div><div class="threshold" title="Decision threshold"></div></div>
+            <div class="meter-scale"><span>0</span><span id="threshold-label"></span><span>1</span></div>
+          </div>
+          <dl class="facts" id="result-facts"></dl>
+          <h3 class="mini-title">Log-mel spectrogram (what the model sees)</h3>
+          <canvas id="spectrogram" width="157" height="64" aria-label="Log-mel spectrogram of the recording"></canvas>
+          <div class="spec-axis"><span>0 s</span><span>time →</span><span>10 s</span></div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- insights -->
+  <section id="tab-insights" class="tab-panel" role="tabpanel" hidden>
+    <div class="tiles" id="insight-tiles"></div>
+    <article class="card story" id="story"></article>
+    <div class="grid two">
+      <article class="card">
+        <header class="card-head"><div><h2>Clips per pump</h2><p class="sub">Four pumps (id 00–06), normal vs abnormal</p></div></header>
+        <div class="legend" data-legend="classes"></div>
+        <div class="chart-box"><canvas id="chart-pumps"></canvas></div>
+      </article>
+      <article class="card">
+        <header class="card-head"><div><h2>Average frequency profile</h2><p class="sub">Mean log-mel energy per band (dB)</p></div></header>
+        <div class="legend" data-legend="classes"></div>
+        <div class="chart-box"><canvas id="chart-spectrum"></canvas></div>
+        <p class="interp" id="spectrum-interp"></p>
+      </article>
+    </div>
+    <div class="grid three" id="feature-cards"></div>
+    <article class="card">
+      <header class="card-head"><div><h2>Which features separate the classes?</h2><p class="sub">ROC-AUC of each single feature on its own (0.5 = no signal, 1.0 = perfect)</p></div></header>
+      <div class="chart-box tall"><canvas id="chart-ranking"></canvas></div>
+    </article>
+  </section>
+
+  <!-- retrain -->
+  <section id="tab-retrain" class="tab-panel" role="tabpanel" hidden>
+    <div class="grid two">
+      <article class="card">
+        <header class="card-head"><div><h2>1 · Upload labelled recordings</h2><p class="sub">Many .wav files or a .zip; saved to the database for retraining</p></div></header>
+        <label class="dropzone" id="upload-drop">
+          <input type="file" id="upload-files" multiple accept=".wav,.flac,.ogg,.mp3,.zip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <span><strong>Choose files</strong> or drop them here</span>
+          <span class="sub" id="upload-file-names">No files selected</span>
+        </label>
+        <div class="row">
+          <label class="field">Label
+            <select id="upload-label">
+              <option value="auto">Auto: from folder / file name</option>
+              <option value="normal">All normal</option>
+              <option value="abnormal">All abnormal</option>
+            </select>
+          </label>
+          <button class="btn primary" id="btn-upload" disabled>Upload</button>
+        </div>
+        <p class="hint">No recordings of your own? <a href="/api/demo-batch" download>Download a demo batch</a>:
+          60 labelled clips (40 normal, 20 abnormal) held out from training, in <code>normal/</code> and
+          <code>abnormal/</code> folders. Upload the .zip as is with the label set to Auto.</p>
+        <div class="progress" id="upload-progress" hidden><div class="bar"></div></div>
+        <div id="upload-result"></div>
+      </article>
+
+      <article class="card">
+        <header class="card-head"><div><h2>2 · Retrain the model</h2><p class="sub">Fine-tunes the current model on new + original data</p></div></header>
+        <div class="pool" id="pool"></div>
+        <div class="trigger-settings">
+          <h3 class="mini-title">Automatic trigger</h3>
+          <label class="switch"><input type="checkbox" id="set-auto"><span>Retrain automatically when needed</span></label>
+          <div class="row">
+            <label class="field">New samples needed<input type="number" id="set-threshold" min="1" max="10000"></label>
+            <label class="field">Retrain if F1 on new data &lt;<input type="number" id="set-floor" min="0" max="1" step="0.05"></label>
+            <button class="btn ghost" id="btn-settings">Save</button>
+          </div>
+        </div>
+        <button class="btn primary wide" id="btn-retrain">Retrain now</button>
+        <div id="run-status"></div>
+      </article>
+    </div>
+
+    <article class="card" id="run-compare-card" hidden>
+      <header class="card-head"><div><h2>Latest retrain: before vs after</h2><p class="sub" id="run-compare-sub">Held-out test set</p></div></header>
+      <div class="legend" id="compare-legend"></div>
+      <div class="chart-box"><canvas id="chart-compare"></canvas></div>
+    </article>
+
+    <div class="grid two">
+      <article class="card">
+        <header class="card-head"><div><h2>Retraining runs</h2></div></header>
+        <div class="table-wrap"><table id="runs-table"></table></div>
+      </article>
+      <article class="card">
+        <header class="card-head"><div><h2>Upload batches</h2><p class="sub">Current model scored on each new batch (monitoring)</p></div></header>
+        <div class="table-wrap"><table id="batches-table"></table></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>DCASE 2020 Task 2 / MIMII pump recordings (CC BY 4.0)</span>
+  <span><a href="/docs">API docs (Swagger)</a></span>
+</footer>
+
+<div class="toast" id="toast" role="alert" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
