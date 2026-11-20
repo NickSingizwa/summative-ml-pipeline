@@ -18,7 +18,3 @@ models/versions/*
 !models/versions/.gitkeep
 
 .DS_Store
-
-# optional pre-downloaded Linux wheels for offline Docker builds
-wheelhouse/*
-!wheelhouse/.gitkeep

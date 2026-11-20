@@ -16,3 +16,4 @@ data/manifest.csv
 data/pipeline.db*
 models/versions/*
 models/.retrain.lock
+wheelhouse

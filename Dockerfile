@@ -1,4 +1,4 @@
-# API + dashboard. HF Spaces expects port 7860 and user id 1000.
+# API + dashboard in one container (runs locally, in docker-compose and on Azure Container Apps).
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -14,14 +14,7 @@ RUN useradd -m -u 1000 app
 WORKDIR /app
 
 COPY requirements.txt .
-# installs from wheelhouse/ if it has wheels in it (my internet kept dropping during builds),
-# otherwise from PyPI like normal
-RUN --mount=type=bind,source=wheelhouse,target=/wheels \
-    if ls /wheels/*.whl >/dev/null 2>&1; then \
-        pip install --no-index --find-links /wheels -r requirements.txt; \
-    else \
-        pip install --retries 10 --timeout 120 -r requirements.txt; \
-    fi
+RUN pip install --retries 10 --timeout 120 -r requirements.txt
 
 COPY --chown=app:app src ./src
 COPY --chown=app:app api ./api

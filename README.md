@@ -223,23 +223,21 @@ docker compose up -d --build --scale api=4
 docker compose restart lb                              # pick up the new replicas
 ```
 
-On a slow or unreliable connection, you can pre-download the Linux wheels into `wheelhouse/`, and the build will
-install from there instead of PyPI:
-`pip download -r requirements.txt -d wheelhouse --only-binary=:all: --python-version 3.11 --platform manylinux_2_27_aarch64 --platform manylinux2014_aarch64`
-(use the `x86_64` platform tags on Intel or AMD machines).
-
-### Deploy to Hugging Face Spaces
+### Deploy to Azure Container Apps
 
 ```bash
-pip install huggingface_hub
-hf auth login                                          # token with write access
-python scripts/deploy_hf_space.py --space <hf-username>/pumpsense
+brew install azure-cli        # or see https://aka.ms/installazurecli
+az login
+bash scripts/deploy_azure.sh
 ```
 
-The script stages the code, the model, the processed test and replay features, and the demo files. It writes the
-Space config (Docker SDK, port 7860) and uploads everything, and Hugging Face then builds the `Dockerfile`. Uploaded
-data and retrained versions live in the container and reset when the Space restarts; the shipped model `v1` is
-always there.
+The script creates a resource group, a container registry and a Container Apps environment. It builds the image
+in Azure from the `Dockerfile`, so only the source code is uploaded, and runs it with 1 CPU and 2 GB RAM. It prints
+the public URL at the end. Running it again rebuilds the image and updates the app.
+
+The cloud app runs as a single replica because the SQLite database and retrained models live inside the container.
+Uploaded data and retrained versions reset when the container restarts; the shipped model `v1` is always there.
+To stop paying for it after grading: `az group delete -n pumpsense-rg`.
 
 ### Reproduce the load test
 
@@ -292,7 +290,7 @@ summative-ml-pipeline/
 │   └── registry.json                       # versions, thresholds, metrics
 ├── reports/                                # experiment table, test metrics, figures
 ├── locust/                                 # locustfile, experiment runner, results
-├── scripts/                                # download_data.py, deploy_hf_space.py
+├── scripts/                                # download_data.py, deploy_azure.sh
 ├── Dockerfile  docker-compose.yml  deploy/nginx.conf
 └── requirements.txt  requirements-dev.txt
 ```
