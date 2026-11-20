@@ -1,0 +1,38 @@
+# Several API containers behind nginx, used for the load test.
+#   docker compose up -d --build --scale api=4   ->  http://localhost:8080
+# Each container gets 1 CPU so the difference between 1, 2 and 4 containers is visible.
+name: pumpsense
+
+services:
+  api:
+    build: .
+    image: pumpsense-api:latest
+    environment:
+      PORT: "8000"
+      TF_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+    expose:
+      - "8000"
+    volumes:
+      - models:/app/models      # shared so a retrained model shows up in every container
+      - appdata:/app/data       # shared sqlite db
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 3g
+    restart: unless-stopped
+
+  lb:
+    image: nginx:1.27-alpine
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+
+volumes:
+  models:
+  appdata:
