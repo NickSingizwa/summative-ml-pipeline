@@ -1,0 +1,50 @@
+[
+  {
+    "label": "1 replica",
+    "containers": 1,
+    "users": 100,
+    "duration": "90s",
+    "requests": 3694,
+    "failures": 2,
+    "failure_rate_pct": 0.05,
+    "rps": 41.46,
+    "avg_ms": 1158.3,
+    "median_ms": 1100.0,
+    "p90_ms": 1600.0,
+    "p95_ms": 1700.0,
+    "p99_ms": 2400.0,
+    "max_ms": 4997.0
+  },
+  {
+    "label": "2 replicas",
+    "containers": 2,
+    "users": 100,
+    "duration": "90s",
+    "requests": 6562,
+    "failures": 0,
+    "failure_rate_pct": 0.0,
+    "rps": 73.66,
+    "avg_ms": 189.9,
+    "median_ms": 140.0,
+    "p90_ms": 370.0,
+    "p95_ms": 490.0,
+    "p99_ms": 1100.0,
+    "max_ms": 2356.7
+  },
+  {
+    "label": "4 replicas",
+    "containers": 4,
+    "users": 100,
+    "duration": "90s",
+    "requests": 7360,
+    "failures": 0,
+    "failure_rate_pct": 0.0,
+    "rps": 82.61,
+    "avg_ms": 58.4,
+    "median_ms": 46.0,
+    "p90_ms": 98.0,
+    "p95_ms": 120.0,
+    "p99_ms": 210.0,
+    "max_ms": 1272.5
+  }
+]

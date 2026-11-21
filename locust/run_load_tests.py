@@ -34,7 +34,8 @@ def wait_for_replicas(host: str, expected: int, timeout: float = 240) -> set[str
     while time.time() < deadline:
         try:
             with urllib.request.urlopen(f"{host}/health", timeout=5) as resp:
-                seen.add(json.load(resp)["host"])
+                data = json.load(resp)
+                seen.add(data.get("instance") or data["host"])
         except Exception:
             time.sleep(1)
         if len(seen) >= expected:
@@ -69,7 +70,7 @@ def run_locust(host: str, tag: str, users: int, spawn_rate: int, duration: str) 
     }
 
 
-def plot(results: list[dict]) -> None:
+def plot(results: list[dict], out_dir: Path = RESULTS, title: str = "Locust") -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -101,17 +102,17 @@ def plot(results: list[dict]) -> None:
     ax.set_xticks(list(x), labels)
     ax.set_title("Response time of /api/predict (ms)", loc="left", fontsize=12, color="#0b0b0b")
     ax.legend(frameon=False, labelcolor=ink2, loc="upper right")
-    fig.suptitle(f"Locust: {results[0]['users']} concurrent users, {results[0]['duration']} per run",
+    fig.suptitle(f"{title}: {results[0]['users']} concurrent users, {results[0]['duration']} per run",
                  x=0.01, ha="left", color=ink2, fontsize=10)
     fig.tight_layout()
-    fig.savefig(RESULTS / "load_test_results.png", dpi=150)
-    print(f"[ok] chart -> {RESULTS / 'load_test_results.png'}")
+    fig.savefig(out_dir / "load_test_results.png", dpi=150)
+    print(f"[ok] chart -> {out_dir / 'load_test_results.png'}")
 
 
-def write_summary(results: list[dict]) -> None:
+def write_summary(results: list[dict], out_dir: Path = RESULTS) -> None:
     keys = ["label", "containers", "users", "duration", "requests", "failures", "failure_rate_pct", "rps",
             "avg_ms", "median_ms", "p90_ms", "p95_ms", "p99_ms", "max_ms"]
-    with open(RESULTS / "summary.csv", "w", newline="") as fh:
+    with open(out_dir / "summary.csv", "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=keys, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(results)
@@ -120,7 +121,7 @@ def write_summary(results: list[dict]) -> None:
     for r in results:
         lines.append(f"| {r['label']} | {r['requests']:,} | {r['failures']} ({r['failure_rate_pct']}%) | {r['rps']} | "
                      f"{r['avg_ms']:,.0f} | {r['median_ms']:,.0f} | {r['p95_ms']:,.0f} | {r['p99_ms']:,.0f} | {r['max_ms']:,.0f} |")
-    (RESULTS / "summary.md").write_text("\n".join(lines) + "\n")
+    (out_dir / "summary.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
 
 
