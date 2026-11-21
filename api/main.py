@@ -8,6 +8,7 @@ import json
 import socket
 import threading
 import time
+import uuid
 from collections import Counter, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -28,6 +29,8 @@ from src.prediction import get_predictor
 
 UI_DIR = C.ROOT_DIR / "ui"
 HOST = socket.gethostname()
+# replicas on Azure all have the same hostname, this id tells them apart
+INSTANCE = uuid.uuid4().hex[:8]
 STARTED_AT = datetime.now(timezone.utc)
 _t0 = time.monotonic()
 
@@ -91,7 +94,7 @@ async def track_requests(request: Request, call_next):
     try:
         response = await call_next(request)
         status = response.status_code
-        response.headers["X-Served-By"] = HOST
+        response.headers["X-Served-By"] = f"{HOST}/{INSTANCE}"
         return response
     finally:
         if not request.url.path.startswith("/static"):
@@ -108,7 +111,7 @@ def _uptime() -> dict:
 def health():
     predictor = get_predictor()
     predictor.reload_if_changed()
-    return {"status": "ok", "host": HOST, "model_version": predictor.version, **_uptime()}
+    return {"status": "ok", "host": HOST, "instance": INSTANCE, "model_version": predictor.version, **_uptime()}
 
 
 @app.get("/api/stats", tags=["monitoring"])
