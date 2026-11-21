@@ -6,9 +6,10 @@ insights, single-file prediction, bulk upload of new labelled audio, and retrain
 
 | | |
 |---|---|
-| **Live app** | _TODO: https://&lt;hf-username&gt;-pumpsense.hf.space_ |
-| **API docs (Swagger)** | _TODO: https://&lt;hf-username&gt;-pumpsense.hf.space/docs_ |
+| **Live app** (Azure Container Apps) | https://pumpsense.kindisland-a6ce7191.southafricanorth.azurecontainerapps.io |
+| **API docs (Swagger)** | https://pumpsense.kindisland-a6ce7191.southafricanorth.azurecontainerapps.io/docs |
 | **Video demo** | _TODO: YouTube link_ |
+| **GitHub** | https://github.com/NickSingizwa/summative-ml-pipeline |
 | **Notebook** | [`notebook/pump_sound_fault_detection.ipynb`](notebook/pump_sound_fault_detection.ipynb) |
 | **Model files** | [`models/pump_sound_cnn.keras`](models/pump_sound_cnn.keras) and [`models/pump_sound_cnn.h5`](models/pump_sound_cnn.h5) |
 
@@ -160,10 +161,34 @@ curl -X POST http://localhost:8000/api/retrain
 ## 4. Flood request simulation (Locust)
 
 [`locust/locustfile.py`](locust/locustfile.py) simulates field technicians. Each user sends a 10 s recording to
-`/api/predict` roughly once a second (wait 0.5 to 1.5 s), with occasional `/health` checks.
-[`locust/run_load_tests.py`](locust/run_load_tests.py) runs the same load, **100 concurrent users for 90 s**,
-against 1, 2 and 4 API containers. The containers run behind an nginx round-robin load balancer
-(`docker-compose.yml`), and each is limited to 1 CPU.
+`/api/predict` roughly once a second (wait 0.5 to 1.5 s), with occasional `/health` checks. The same load,
+**100 concurrent users for 90 s**, was run against 1, 2 and 4 containers twice: in the cloud on Azure and
+locally with Docker.
+
+### In the cloud (Azure Container Apps)
+
+[`locust/run_azure_load_tests.py`](locust/run_azure_load_tests.py) scales the deployed app to 1, 2 and 4 replicas
+(1 vCPU and 2 GB each) and runs Locust from an Azure Container Instance in the same region. Running it from my
+laptop would mostly have measured my home upload speed, which is about one 10 s clip per second.
+
+| Setup | Requests | Failures | Throughput (req/s) | Avg (ms) | Median (ms) | p95 (ms) | p99 (ms) | Max (ms) |
+|---|---|---|---|---|---|---|---|---|
+| 1 replica | 3,694 | 2 (0.05%) | 41.46 | 1,158 | 1,100 | 1,700 | 2,400 | 4,997 |
+| 2 replicas | 6,562 | 0 (0.0%) | 73.66 | 190 | 140 | 490 | 1,100 | 2,357 |
+| 4 replicas | 7,360 | 0 (0.0%) | 82.61 | 58 | 46 | 120 | 210 | 1,272 |
+
+![Azure load test results](locust/results/azure/load_test_results.png)
+
+One replica saturates at about 41 predictions per second, so requests queue and the median response time is 1.1 s.
+Two of the 3,694 requests failed under that overload. Two replicas almost double the throughput and bring the
+median down to 140 ms. With four replicas the app keeps up with all 100 users: 83 req/s, a 46 ms median and 0
+failures. These response times are measured inside Azure, so they don't include the user's own internet
+connection. From Kigali, one prediction took about 1 s end to end, most of it uploading the 320 KB clip.
+
+### Locally (Docker, nginx load balancer)
+
+[`locust/run_load_tests.py`](locust/run_load_tests.py) runs the same test against 1, 2 and 4 API containers. The
+containers run behind an nginx round-robin load balancer (`docker-compose.yml`), and each is limited to 1 CPU.
 
 | Setup | Requests | Failures | Throughput (req/s) | Avg (ms) | Median (ms) | p95 (ms) | p99 (ms) | Max (ms) |
 |---|---|---|---|---|---|---|---|---|
@@ -173,13 +198,12 @@ against 1, 2 and 4 API containers. The containers run behind an nginx round-robi
 
 ![Load test results](locust/results/load_test_results.png)
 
-**Interpretation.** One prediction takes about 20 ms of CPU, so a single 1-CPU container saturates at about 26
-predictions per second. The 100 users offer more than that, so requests queue and the median response time grows
+**Interpretation.** One prediction takes about 20 ms of CPU, so a single 1-CPU container on my laptop (Docker runs
+the containers in a VM) saturates at about 26 predictions per second. The 100 users offer more than that, so requests queue and the median response time grows
 to 2.5 s. Doubling to 2 containers doubles throughput (50 req/s) and cuts the median to 0.5 s, but the system is
 still saturated. With 4 containers, capacity exceeds the offered load: throughput rises to 82 req/s (close to the
 rate at which 100 users with a 1 s think time send predictions) and the median falls to **21 ms**, about the cost
-of one prediction. No request failed in any
-run. Throughput scales almost linearly with containers, because predictions are stateless and every replica
+of one prediction. No request failed in any run. Throughput scales almost linearly with containers, because predictions are stateless and every replica
 serves the same model from the shared volume. Full Locust reports (HTML and CSV) are in
 [`locust/results/raw/`](locust/results/raw/).
 
@@ -231,9 +255,10 @@ az login
 bash scripts/deploy_azure.sh
 ```
 
-The script creates a resource group, a container registry and a Container Apps environment. It builds the image
-in Azure from the `Dockerfile`, so only the source code is uploaded, and runs it with 1 CPU and 2 GB RAM. It prints
-the public URL at the end. Running it again rebuilds the image and updates the app.
+The script creates a resource group, a container registry and a Container Apps environment. It builds the
+`linux/amd64` image locally with Docker (Azure for Students subscriptions don't allow cloud builds), pushes it to the
+registry and runs it with 1 CPU and 2 GB RAM. It prints the public URL at the end. Running it again rebuilds the
+image and updates the app.
 
 The cloud app runs as a single replica because the SQLite database and retrained models live inside the container.
 Uploaded data and retrained versions reset when the container restarts; the shipped model `v1` is always there.
@@ -242,9 +267,13 @@ To stop paying for it after grading: `az group delete -n pumpsense-rg`.
 ### Reproduce the load test
 
 ```bash
+# locally
 docker compose up -d --build
 python locust/run_load_tests.py --containers 1 2 4 --users 100 --duration 90s
 # or interactively: locust -f locust/locustfile.py --host http://localhost:8080
+
+# on Azure (after deploying; scales back to 1 replica at the end)
+python locust/run_azure_load_tests.py --replicas 1 2 4
 ```
 
 ## 6. Demo walkthrough (what the video shows)
