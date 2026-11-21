@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Deploys the app to Azure Container Apps.
-# The image gets built inside Azure Container Registry, so only the source is uploaded.
+# Builds the docker image locally, pushes it to Azure Container Registry and runs it.
+# Needs docker running.
 #
 #   az login
 #   bash scripts/deploy_azure.sh
@@ -29,10 +30,11 @@ az group create -n "$RG" -l "$LOCATION" -o none
 az acr show -n "$ACR" -o none 2>/dev/null \
   || az acr create -n "$ACR" -g "$RG" -l "$LOCATION" --sku Basic --admin-enabled true -o none
 
-# .dockerignore keeps the raw dataset out of the upload
-az acr build -r "$ACR" -t "pumpsense:$TAG" -t pumpsense:latest .
-
+# Azure for Students doesn't allow cloud builds (az acr build), so build here and push.
+# Azure runs amd64, so cross-build if this is an arm Mac
 IMAGE="$ACR.azurecr.io/pumpsense:$TAG"
+az acr login -n "$ACR" --only-show-errors
+docker buildx build --platform linux/amd64 -t "$IMAGE" -t "$ACR.azurecr.io/pumpsense:latest" --push .
 ACR_USER=$(az acr credential show -n "$ACR" --query username -o tsv)
 ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
 
